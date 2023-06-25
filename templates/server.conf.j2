@@ -14,8 +14,14 @@ port {{ openvpn_port }}
 # TCP or UDP server?
 proto {{ openvpn_proto }}
 
-# Encrypt packets with cipher algorithm
-cipher {{ openvpn_cipher }}
+{% if openvpn_portshare is defined %}
+# Port sharing
+port-share 127.0.0.1 {{ openvpn_portshare }}
+{% endif %}
+
+{% if openvpn_ncp_ciphers | length %}
+ncp-ciphers {{ openvpn_ncp_ciphers }}
+{% endif %}
 
 # "dev tun" will create a routed IP tunnel, "dev tap" will create an ethernet
 # tunnel. Use "dev tap0" if you are ethernet bridging and have precreated a
@@ -37,23 +43,23 @@ dev {{ openvpn_dev }}
 #
 # Any X509 key management system can be used. OpenVPN can also use a PKCS #12
 # formatted key file (see "pkcs12" directive in man page).
-ca {{openvpn_keydir}}/ca.crt
-cert {{openvpn_keydir}}/server.crt
-key {{openvpn_keydir}}/server.key  # This file should be kept secret
+ca {{ openvpn_keydir }}/ca.crt
+cert {{ openvpn_keydir }}/issued/server.crt
+key {{ openvpn_keydir }}/private/server.key  # This file should be kept secret
 
 # Diffie hellman parameters. Generate your own with: openssl dhparam -out
 # dh1024.pem 1024 Substitute 2048 for 1024 if you are using 2048 bit keys.
-dh {{openvpn_keydir}}/dh{{openvpn_key_size}}.pem
+dh {{ openvpn_keydir }}/dh.pem
 
 {% if openvpn_tls_auth -%}
 # Use a static pre-shared key (PSK)
-tls-auth {{ openvpn_keydir }}/{{ openvpn_tls_key }} 0
+tls-auth {{ openvpn_etcdir }}/ovpns/{{ openvpn_tls_key }} 0
 tls-server
 {% endif %}
 
 # Client configuration directory.
-{% if openvpn_client_config_dir is defined -%}
-client-config-dir {{ openvpn_client_config_dir }}
+{% if openvpn_ccd is defined -%}
+client-config-dir {{ openvpn_ccd }}
 {% endif %}
 
 # Which VPN topology to use? (net30, subnet, p2p)
@@ -81,25 +87,32 @@ server {{ openvpn_server }}
 # to connecting clients.  Leave this line commented
 # out unless you are ethernet bridging.
 server-bridge {{ openvpn_bridge.address }} {{ openvpn_bridge.netmask }} {{ openvpn_bridge.dhcp_start }} {{ openvpn_bridge.dhcp_end }}
+
+{% if ansible_os_family == 'RedHat' %}
+# Tap management through script
+up "/etc/openvpn/up.sh br-{{ openvpn_dev }}"
+down "/etc/openvpn/down.sh br-{{ openvpn_dev }}"
+script-security 2
+{% endif %}
 {% endif %}
 
 # Maintain a record of client <-> virtual IP address associations in this file.
 # If OpenVPN goes down or is restarted, reconnecting clients can be assigned
 # the same virtual IP address from the pool that was previously assigned.
-ifconfig-pool-persist {{openvpn_ifconfig_pool_persist}}
+ifconfig-pool-persist {{ openvpn_ifconfig_pool_persist }}
 
 # The keepalive directive causes ping-like messages to be sent back and forth
 # over the link so that each side knows when the other side has gone down. Ping
 # every 10 seconds, assume that remote peer is down if no ping received during
 # a 120 second time period.
+{% if openvpn_keepalive != '' %}
 keepalive {{ openvpn_keepalive }}
+{% endif %}
 
 # Enable compression on the VPN link. If you enable it here, you must also
 # enable it in the client config file.
-{% if openvpn_comp_lzo -%}
-comp-lzo
-{% else -%}
-;comp-lzo
+{% if openvpn_compression -%}
+{{ openvpn_compression }}
 {% endif %}
 
 # The persist options will try to avoid accessing certain resources on restart
@@ -166,5 +179,9 @@ script-security 3 execve
 {% endfor %}
 
 {% if crl_pem_file.stat.exists %}
-crl-verify {{openvpn_keydir}}/crl.pem
+crl-verify {{ openvpn_keydir }}/crl.pem
 {% endif %}
+
+{% for push_route in openvpn_route_ranges %}
+push "route {{ push_route }}"
+{% endfor %}

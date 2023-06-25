@@ -1,0 +1,8 @@
+---
+
+- name: Setup LDAP
+  template:
+    src: authentication/auth-ldap.conf.j2
+    dest: /etc/openvpn/auth-ldap.conf
+    mode: 0o644
+  when: openvpn_use_ldap | bool

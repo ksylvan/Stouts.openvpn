@@ -1,141 +1,83 @@
-Stouts.openvpn
-==============
+# Stouts.openvpn
 
 [![Build Status](http://img.shields.io/travis/Stouts/Stouts.openvpn.svg?style=flat-square)](https://travis-ci.org/Stouts/Stouts.openvpn)
 [![Galaxy](http://img.shields.io/badge/galaxy-Stouts.openvpn-blue.svg?style=flat-square)](https://galaxy.ansible.com/Stouts/openvpn/)
 
-Ansible role which manage openvpn server
+Ansible role that installs an openvpn server
 
 * Install and setup OpenVPN server
-* Create/revoke client's configurations and certificates
-* Setup authentication with PAM (System, passwd files)
+* Setup authentication
 
-#### Requirements
+## Requirements
 
-Only tested on ubuntu for now.
+Previous versions of the role supported generating certificates and keys for the
+OpenVPN server to use. Since version 3.0.0, such support has been removed and
+the users of the role are expected to use some other way of generating
+certificates/keys (eg using another Ansible role). See the example playbook for
+an example.
 
-#### Variables
+An EasyRSA role that was created specifically to compliment this role can be
+found [here](https://github.com/nkakouros-original/ansible-role-easyrsa).
 
-```yaml
-openvpn_enabled: yes                                # The role is enabled
+## Supported platforms
 
-openvpn_etcdir: /etc/openvpn
-openvpn_keydir: "{{openvpn_etcdir}}/keys"
+- Ubuntu 14.04
+- Ubuntu 16.04
+- Ubuntu 18.04
+- Debian 8
+- Debian 9
+- Centos 7
 
-# Installation settings
-openvpn_use_external_repo: false                    # Enable upstream OpenVPN repository
-openvpn_use_system_easyrsa: false                   # Install EasyRSA from system packages
+## Variables
 
-# Default settings (See OpenVPN documentation)
-openvpn_host: "{{inventory_hostname}}"              # The server address
-openvpn_port: 1194
-openvpn_proto: udp
-openvpn_dev: tun
-openvpn_server: 10.8.0.0 255.255.255.0
-openvpn_max_clients: 100
-openvpn_log: /var/log/openvpn.log                   # Log's directory
-openvpn_keepalive: "10 120"
-openvpn_ifconfig_pool_persist: ipp.txt
-openvpn_comp_lzo: yes                               # Enable compression
-openvpn_cipher: BF-CBC                              # Encryption algorithm
-openvpn_status: openvpn-status.log
-openvpn_verb: 3
-openvpn_user: nobody
-openvpn_group: nogroup
-openvpn_resolv_retry: infinite
-openvpn_server_options: []                          # Additional server options
-                                                    # openvpn_server_options:
-                                                    # - dev-node MyTap
-                                                    # - client-to-client
-openvpn_client_options: []                          # Additional client options
-                                                    # openvpn_client_options:
-                                                    # - dev-node MyTap
-                                                    # - client-to-client
+See [defaults/main.yml](defaults/main.yml) for a full list of variables together
+with documentation on how to use them to configure this role.
 
-openvpn_key_country: US
-openvpn_key_province: CA
-openvpn_key_city: SanFrancisco
-openvpn_key_org: Fort-Funston
-openvpn_key_email: me@myhost.mydomain
-openvpn_key_size: 1024
+## Elastic Beats monitoring
+### Heartbeat monitor
 
-openvpn_clients: [client]                         # Make clients certificate
-openvpn_clients_revoke: []                        # Revoke clients certificates
-
-# Use PAM authentication
-openvpn_use_pam: yes
-openvpn_use_pam_users: []                         # If empty use system users
-                                                  # otherwise use users from the option
-                                                  # openvpn_use_pam_users:
-                                                  # - { name: user, password: password }
-
-# Use LDAP authentication (default is disabled)
-openvpn_use_ldap: no
-openvpn_ldap_tlsenable: 'no'
-openvpn_ldap_follow_referrals: 'no'
-
-# To use LDAP you must configure the following vars with real:
-openvpn_ldap_server: ldap.mycompany.net
-openvpn_ldap_bind_dn: 'user@mycompany.net'
-openvpn_ldap_bind_password: password
-openvpn_ldap_base_dn: ou=CorpAccounts,dc=mycompany,dc=net
-openvpn_ldap_search_filter: '"sAMAccountName=%u"'
-openvpn_ldap_group_search_filter: '"cn=OpenVPNUsers"'
-
-# Use simple authentication (default is disabled)
-openvpn_simple_auth: yes
-openvpn_simple_auth_password: password
-
-# Use bridged mode (default is routed)
-# WARNING: this may cause the playbook to fail the first time
-# the network configuration is changed;
-# if this happens just run the playbook again
-openvpn_bridge:
-    address: 10.0.0.1
-    netmask: 255.255.255.0
-    network: 10.0.0.0
-    broadcast: 10.0.0.255
-    dhcp_start: 10.0.0.2
-    dhcp_end: 10.0.0.254
-openvpn_server_options:
-    - "dev-type tap"
-    - "tls-server"
-
-# Whether to embed CA, cert, and key info inside client OVPN config file.
-openvpn_unified_client_profiles: no
-
-```
-
-#### Usage
-
-Add `Stouts.openvpn` to your roles and set vars in your playbook file.
-
-Example:
+The role comes bundled with a [meta/monitors.yml](meta/monitors.yml) template
+that can be used by [Heartbeat](https://www.elastic.co/products/beats/heartbeat)
+to check if the OpenVPN server is up and running.  The template can be
+configured via variables (they should be self-explanatory). To use it, you can
+use some Ansible tasks to upload it to your Heartbeat instance. For example:
 
 ```yaml
+- name: Add earth-kibana host
+  add_host:
+    name: heartbeat_instance
+    hostname: "{{ heartbeat.hostname }}"
+    ansible_host: "{{ heartbeat.ansible_host }}"
+    ansible_password: "{{ heartbeat.ansible_password }}"
+    ansible_user: "{{ heartbeat.ansible_user }}"
 
-- hosts: all
-
-  roles:
-  - Stouts.openvpn
-
-  vars:
-  openvpn_use_pam: yes
-  openvpn_clients: [myvpn]
-  openvpn_use_pam_users:
-  - { name: user1, password: password1 }
-  - { name: user2, password: password2 }
-
+- name: Upload role monitors
+  template:
+    src: "{{ item.1 + '/' + item.0 }}/meta/monitors.yml"
+    dest: "/etc/heartbeat/monitors.d/{{ inventory_hostname }}.{{ item.0.split('.')[-1] }}.yml"
+  when: (item.1 + '/' + item.0 + '/meta/monitors.yml') is file
+  loop: "{{ roles | product(lookup('config', 'DEFAULT_ROLES_PATH')) | list }}"
+  delegate_to: heartbeat_instance
 ```
 
-Install and copy client's configuration from `/etc/openvpn/keys/myvpn.tar.gz` file.
-If you set `openvpn_unified_client_profiles: yes`, then you only need to copy
-`/etc/openvpn/keys/myvpn.ovpn`, as all the config info will be inlined.
+### Filebeat input
 
-#### License
+The role also includes a filebeat input file that can be uploaded to a filebeat
+server. The input reads the OpenVPN log and reads the lines that correspond to
+successful connections. The role includes an Elasticsearch ingest pipeline that
+can be imported to Elasticsearch to parse and break the log lines into fields.
+The files can be found under the `meta/` folder.
+
+## Example playbook
+
+See [molecule/default/converge.yml](molecule/default/converge.yml) for a working
+example of how to use this role.
+
+
+## License
 
 Licensed under the MIT License. See the LICENSE file for details.
 
-#### Feedback, bug-reports, requests, ...
+## Feedback, bug-reports, requests, ...
 
-Are [welcome](https://github.com/Stouts/Stouts.openvpn/issues)!
+...are [welcome](https://github.com/Stouts/Stouts.openvpn/issues)!
